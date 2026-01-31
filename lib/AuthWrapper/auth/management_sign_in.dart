@@ -1,6 +1,11 @@
+import 'package:dormtrack/AuthWrapper/adminScreen/dashboard.dart';
 import 'package:flutter/material.dart';
-import '../../widgets/dormtrack_logo.dart';
 import 'management_sign_up.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dormtrack/warden/warden_dashboard.dart';
+import '../../widgets/auth_animation.dart'; // ✅ Updated Import
+import 'package:dormtrack/AuthWrapper/adminScreen/admin_navigation_hub.dart';
 
 class ManagementSignIn extends StatefulWidget {
   const ManagementSignIn({super.key});
@@ -16,11 +21,71 @@ class _ManagementSignInState extends State<ManagementSignIn> {
   final passwordController = TextEditingController();
 
   bool obscurePassword = true;
-  bool rememberMe = false;
+  bool isLoading = false;
 
-  String selectedRole = 'Warden';
+  // Modern Blue Theme Colors
+  final Color primaryBlue = const Color(0xFF0D47A1);
+  final Color accentBlue = const Color(0xFF2196F3);
+  final Color lightBgBlue = const Color(0xFFF1F7FF);
+  final Color textGrey = const Color(0xFF64748B);
 
-  final List<String> roles = ['Warden', 'Maintenance Staff', 'Super Admin'];
+  Future<void> loginManagement() async {
+    setState(() => isLoading = true);
+    try {
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+        email: adminController.text.trim(),
+        password: passwordController.text.trim(),
+      );
+
+      User user = userCredential.user!;
+
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('management')
+          .doc(user.uid)
+          .get();
+
+      if (!doc.exists) {
+        await FirebaseAuth.instance.signOut();
+        throw 'No management account found';
+      }
+
+      final data = doc.data() as Map<String, dynamic>;
+      final role = data['role'];
+
+      if (mounted) {
+        if (role == 'warden') {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const WardenDashboard()),
+                (route) => false,
+          );
+        } else if (role == 'superadmin') {
+          // ✅ CHANGED THIS: Now pointing to the Hub instead of just the Dashboard
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminNavigationHub()),
+                (route) => false,
+          );
+        } else {
+          await FirebaseAuth.instance.signOut();
+          throw 'Invalid role assigned';
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      _showSnack(e.message ?? 'Login failed');
+    } catch (e) {
+      _showSnack(e.toString());
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  void _showSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,205 +93,168 @@ class _ManagementSignInState extends State<ManagementSignIn> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // 🔙 Back Arrow
+                // 🔙 Back Button
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: Color(0xFF14532D),
-                      size: 28,
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: lightBgBlue,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: primaryBlue,
+                        size: 20,
+                      ),
                     ),
-                    onPressed: () {
-                      Navigator.pop(
-                        context,
-                      ); // goes back to RoleSelectionMobile
-                    },
                   ),
                 ),
+
+                // ✨ Animation (Replaced Logo)
+                const SizedBox(height: 10),
+                const AuthAnimation(type: 'login', height: 280),
                 const SizedBox(height: 10),
 
-                const SizedBox(height: 20),
-
-                // ✅ Branding
-                const DormTrackLogo(iconSize: 56),
-
-                const SizedBox(height: 18),
-                const Text(
+                Text(
                   'Management Login',
                   style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF14532D),
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    color: primaryBlue,
+                    letterSpacing: -0.8,
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   'Secure access for hostel authorities',
-                  style: TextStyle(fontSize: 14, color: Color(0xFF4D7C0F)),
+                  style: TextStyle(fontSize: 15, color: textGrey),
                 ),
 
-                const SizedBox(height: 36),
+                const SizedBox(height: 35),
 
-                // 👤 Admin Email / Username
+                // 👤 Admin Email
                 _inputField(
                   controller: adminController,
-                  label: 'Admin Email / Username',
-                  icon: Icons.admin_panel_settings_rounded,
-                  validator: (v) => v!.isEmpty ? 'Admin ID is required' : null,
+                  label: 'Enter Email',
+                  icon: Icons.admin_panel_settings_outlined,
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
 
-                const SizedBox(height: 18),
+                const SizedBox(height: 20),
 
                 // 🔐 Password
                 _inputField(
                   controller: passwordController,
-                  label: 'Password',
-                  icon: Icons.lock_rounded,
+                  label: 'Enter Password',
+                  icon: Icons.lock_outline_rounded,
                   obscure: obscurePassword,
                   suffix: IconButton(
                     icon: Icon(
-                      obscurePassword ? Icons.visibility_off : Icons.visibility,
-                      color: const Color(0xFF16A34A),
+                      obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: accentBlue,
                     ),
-                    onPressed: () {
-                      setState(() {
-                        obscurePassword = !obscurePassword;
-                      });
-                    },
+                    onPressed: () =>
+                        setState(() => obscurePassword = !obscurePassword),
                   ),
-                  validator: (v) => v!.isEmpty ? 'Password is required' : null,
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
 
-                const SizedBox(height: 18),
+                const SizedBox(height: 25),
 
-                // 🎭 Role Selection
+                // 🔒 Security Hint
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFF22C55E)),
+                    color: lightBgBlue,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: selectedRole,
-                      icon: const Icon(Icons.arrow_drop_down),
-                      isExpanded: true,
-                      items: roles.map((role) {
-                        return DropdownMenuItem(value: role, child: Text(role));
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          selectedRole = value!;
-                        });
-                      },
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // 🔒 Optional 2FA hint
-                Row(
-                  children: const [
-                    Icon(Icons.security, color: Color(0xFF16A34A), size: 18),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Two-Factor Authentication may be required for this role',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF4D7C0F),
+                  child: Row(
+                    children: [
+                      Icon(Icons.security_rounded, color: accentBlue, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Authorized management access only.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: primaryBlue,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
 
-                const SizedBox(height: 12),
-
-                // ☑ Remember Me
-                Row(
-                  children: [
-                    Checkbox(
-                      value: rememberMe,
-                      activeColor: const Color(0xFF22C55E),
-                      onChanged: (value) {
-                        setState(() {
-                          rememberMe = value!;
-                        });
-                      },
-                    ),
-                    const Text(
-                      'Remember me',
-                      style: TextStyle(color: Color(0xFF14532D)),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 26),
+                const SizedBox(height: 35),
 
                 // 🚀 Login Button
                 SizedBox(
                   width: double.infinity,
-                  height: 54,
+                  height: 58,
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: isLoading
+                        ? null
+                        : () {
                       if (_formKey.currentState!.validate()) {
-                        // 🔐 Firebase + Role + 2FA logic comes next
+                        loginManagement();
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      elevation: 6,
+                      backgroundColor: primaryBlue,
+                      foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      backgroundColor: Colors.transparent,
+                      elevation: 0,
                     ),
-                    child: Ink(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF22C55E), Color(0xFF4ADE80)],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'Login',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                    child: isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                      'Login',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
 
-                // 🔁 Go to Management Sign Up
+                const SizedBox(height: 24),
+
+                // 🔁 Sign Up Link
                 TextButton(
                   onPressed: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const ManagementSignUp(),
+                        builder: (_) => const ManagementSignUp(),
                       ),
                     );
                   },
-                  child: const Text(
-                    "Not registered? Sign up now",
-                    style: TextStyle(
-                      color: Color(0xFF15803D), // matches management theme
-                      fontWeight: FontWeight.w600,
+                  child: RichText(
+                    text: TextSpan(
+                      text: "Not registered? ",
+                      style: TextStyle(color: textGrey, fontSize: 15),
+                      children: [
+                        TextSpan(
+                          text: "Sign up now",
+                          style: TextStyle(
+                            color: accentBlue,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -238,7 +266,6 @@ class _ManagementSignInState extends State<ManagementSignIn> {
     );
   }
 
-  // 🔧 Reusable input field
   Widget _inputField({
     required TextEditingController controller,
     required String label,
@@ -251,19 +278,21 @@ class _ManagementSignInState extends State<ManagementSignIn> {
       controller: controller,
       obscureText: obscure,
       validator: validator,
+      style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
       decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF16A34A)),
+        hintText: label,
+        prefixIcon: Icon(icon, color: accentBlue, size: 22),
         suffixIcon: suffix,
         filled: true,
-        fillColor: const Color(0xFFF0FDF4),
+        fillColor: lightBgBlue,
+        hintStyle: TextStyle(color: textGrey.withValues(alpha: 0.6)),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFF22C55E), width: 1.5),
+          borderSide: BorderSide(color: accentBlue, width: 1.5),
         ),
       ),
     );

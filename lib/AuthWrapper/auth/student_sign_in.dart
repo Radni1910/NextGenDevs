@@ -1,6 +1,10 @@
+import 'package:dormtrack/AuthWrapper/StudentScreens/student_welcome_screen.dart';
 import 'package:flutter/material.dart';
-import '../../widgets/dormtrack_logo.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'student_sign_up.dart';
+import '../StudentScreens/student_welcome_screen.dart';
+import '../../widgets/auth_animation.dart'; // ✅ Added for modern UI
 
 class StudentSignIn extends StatefulWidget {
   const StudentSignIn({super.key});
@@ -12,13 +16,79 @@ class StudentSignIn extends StatefulWidget {
 class _StudentSignInState extends State<StudentSignIn> {
   final _formKey = GlobalKey<FormState>();
 
-  final studentIdController = TextEditingController(); // ✅ added
+  final studentIdController = TextEditingController();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
   bool isLoading = false;
   bool obscurePassword = true;
-  bool rememberMe = false; // ✅ added
+
+  // Modern Blue Theme Colors
+  final Color primaryBlue = const Color(0xFF0D47A1);
+  final Color accentBlue = const Color(0xFF2196F3);
+  final Color lightBgBlue = const Color(0xFFF1F7FF);
+  final Color textGrey = const Color(0xFF64748B);
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // ✅ PRESERVED LOGIC: Login Student with Role Check
+  Future<void> loginStudent() async {
+    setState(() => isLoading = true);
+    try {
+      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: emailController.text.trim(),
+        password: passwordController.text.trim(),
+      );
+
+      User user = userCredential.user!;
+
+      // 🔒 1. Check email verification
+      if (!user.emailVerified) {
+        await _auth.signOut();
+        _showSnack("Please verify your email before logging in", isError: true);
+        return;
+      }
+
+      // 📄 2. Fetch user profile
+      DocumentSnapshot userDoc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (!userDoc.exists) {
+        await _auth.signOut();
+        _showSnack("User profile not found", isError: true);
+        return;
+      }
+
+      // 🧠 3. Role check (Strictly students only)
+      if (userDoc['role'] == 'student') {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const StudentWelcomeScreen()),
+          );
+        }
+      } else {
+        await _auth.signOut();
+        _showSnack("Access denied: Not a student account", isError: true);
+      }
+    } on FirebaseAuthException catch (e) {
+      _showSnack(e.message ?? "Login failed", isError: true);
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  void _showSnack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.redAccent : primaryBlue,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,60 +96,48 @@ class _StudentSignInState extends State<StudentSignIn> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // 🔙 Back Arrow
+                // 🔙 Back Button
                 Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: Color(0xFF14532D),
-                      size: 28,
+                    icon: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: primaryBlue,
                     ),
-                    onPressed: () {
-                      Navigator.pop(
-                        context,
-                      ); // goes back to RoleSelectionMobile
-                    },
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ),
-                const SizedBox(height: 10),
 
-                const SizedBox(height: 20),
+                const AuthAnimation(type: 'login', height: 260),
 
-                // ✅ App Logo
-                const DormTrackLogo(iconSize: 56),
-
-                const SizedBox(height: 18),
-                const Text(
-                  'Student Login',
+                Text(
+                  'Welcome Back',
                   style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF14532D),
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    color: primaryBlue,
+                    letterSpacing: -1.0,
                   ),
                 ),
-
-                const SizedBox(height: 6),
-                const Text(
+                const SizedBox(height: 8),
+                Text(
                   'Login to manage your hostel issues',
-                  style: TextStyle(fontSize: 14, color: Color(0xFF4D7C0F)),
+                  style: TextStyle(fontSize: 16, color: textGrey),
                 ),
 
-                const SizedBox(height: 36),
+                const SizedBox(height: 32),
 
-                // 🆔 Student ID / Roll Number
+                // 🆔 Student ID
                 _inputField(
                   controller: studentIdController,
                   label: 'Student ID / Roll Number',
-                  icon: Icons.badge_rounded,
-                  validator: (v) =>
-                      v!.isEmpty ? 'Student ID is required' : null,
+                  icon: Icons.badge_outlined,
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
 
                 const SizedBox(height: 18),
@@ -87,10 +145,10 @@ class _StudentSignInState extends State<StudentSignIn> {
                 // 📧 Email
                 _inputField(
                   controller: emailController,
-                  label: 'Email',
-                  icon: Icons.email_rounded,
+                  label: 'University Email',
+                  icon: Icons.alternate_email_rounded,
                   keyboardType: TextInputType.emailAddress,
-                  validator: (v) => v!.isEmpty ? 'Email is required' : null,
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
 
                 const SizedBox(height: 18),
@@ -99,120 +157,76 @@ class _StudentSignInState extends State<StudentSignIn> {
                 _inputField(
                   controller: passwordController,
                   label: 'Password',
-                  icon: Icons.lock_rounded,
+                  icon: Icons.lock_outline_rounded,
                   obscure: obscurePassword,
                   suffix: IconButton(
                     icon: Icon(
-                      obscurePassword ? Icons.visibility_off : Icons.visibility,
-                      color: const Color(0xFF16A34A),
+                      obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: accentBlue,
                     ),
-                    onPressed: () {
-                      setState(() {
-                        obscurePassword = !obscurePassword;
-                      });
-                    },
+                    onPressed: () =>
+                        setState(() => obscurePassword = !obscurePassword),
                   ),
-                  validator: (v) => v!.isEmpty ? 'Password is required' : null,
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
 
-                const SizedBox(height: 10),
-
-                // ✅ Remember Me
-                Row(
-                  children: [
-                    Checkbox(
-                      value: rememberMe,
-                      activeColor: const Color(0xFF22C55E),
-                      onChanged: (value) {
-                        setState(() {
-                          rememberMe = value!;
-                        });
-                      },
-                    ),
-                    const Text(
-                      'Remember Me',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF14532D),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 20),
+                const SizedBox(height: 40),
 
                 // 🚀 Login Button
                 SizedBox(
                   width: double.infinity,
-                  height: 54,
+                  height: 58,
                   child: ElevatedButton(
                     onPressed: isLoading
                         ? null
                         : () {
-                            if (_formKey.currentState!.validate()) {
-                              // 🔗 Firebase login comes next
-                              // studentIdController.text
-                              // emailController.text
-                              // passwordController.text
-                              // rememberMe
-                            }
-                          },
-                    style:
-                        ElevatedButton.styleFrom(
-                          elevation: 6,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          backgroundColor: Colors.transparent,
-                          shadowColor: const Color(0xFF22C55E).withOpacity(0.4),
-                        ).copyWith(
-                          backgroundColor: MaterialStateProperty.all(
-                            Colors.transparent,
-                          ),
-                        ),
-                    child: Ink(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF22C55E), Color(0xFF4ADE80)],
-                        ),
+                      if (_formKey.currentState!.validate()) {
+                        loginStudent();
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryBlue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Center(
-                        child: isLoading
-                            ? const CircularProgressIndicator(
-                                color: Colors.white,
-                              )
-                            : const Text(
-                                'Login',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
+                      elevation: 0,
+                    ),
+                    child: isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                      'Login',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
                 // 🔁 Go to Sign Up
                 TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const StudentSignUp(),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    "Not Registered? Sign Up Now",
-                    style: TextStyle(
-                      color: Color(0xFF15803D),
-                      fontWeight: FontWeight.w600,
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const StudentSignUp()),
+                  ),
+                  child: RichText(
+                    text: TextSpan(
+                      text: "Don't have an account? ",
+                      style: TextStyle(color: textGrey),
+                      children: [
+                        TextSpan(
+                          text: "Sign Up Now",
+                          style: TextStyle(
+                            color: accentBlue,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -224,7 +238,6 @@ class _StudentSignInState extends State<StudentSignIn> {
     );
   }
 
-  // 🔧 Reusable input field (unchanged)
   Widget _inputField({
     required TextEditingController controller,
     required String label,
@@ -239,19 +252,21 @@ class _StudentSignInState extends State<StudentSignIn> {
       obscureText: obscure,
       keyboardType: keyboardType,
       validator: validator,
+      style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
       decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF16A34A)),
+        hintText: label,
+        prefixIcon: Icon(icon, color: accentBlue, size: 22),
         suffixIcon: suffix,
         filled: true,
-        fillColor: const Color(0xFFF0FDF4),
+        fillColor: lightBgBlue,
+        hintStyle: TextStyle(color: textGrey.withValues(alpha: 0.6)),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFF22C55E), width: 1.5),
+          borderSide: BorderSide(color: accentBlue, width: 1.5),
         ),
       ),
     );

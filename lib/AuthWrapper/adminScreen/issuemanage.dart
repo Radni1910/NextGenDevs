@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class IssueManageScreen extends StatefulWidget {
   const IssueManageScreen({super.key});
@@ -11,73 +12,256 @@ class _IssueManageScreenState extends State<IssueManageScreen> {
   String selectedFilter = 'All';
   String searchQuery = '';
 
-  static const Color primary = Color(0xFF22577A);
-  static const Color secondary = Color(0xFF38A3A5);
-  static const Color success = Color(0xFF57CC99);
-  static const Color highlight = Color(0xFF80ED99);
-  static const Color background = Color(0xFFC7F9CC);
-
-  final List<Map<String, dynamic>> issues = [
-    {
-      'title': 'Water Leakage',
-      'category': 'Plumbing',
-      'location': 'Block A - Room 203',
-      'description': 'Continuous water leakage from wash basin.',
-      'status': 'Open',
-      'priority': 'High',
-      'date': '12 Sep 2025',
-    },
-    {
-      'title': 'Fan not working',
-      'category': 'Electrical',
-      'location': 'Block B - Room 101',
-      'description': 'Ceiling fan stopped working.',
-      'status': 'In Progress',
-      'priority': 'Medium',
-      'date': '11 Sep 2025',
-    },
-    {
-      'title': 'Room cleaning required',
-      'category': 'Cleaning',
-      'location': 'Block C - Room 305',
-      'description': 'Room not cleaned for 3 days.',
-      'status': 'Resolved',
-      'priority': 'Low',
-      'date': '10 Sep 2025',
-    },
-  ];
+  // 🔥 UPDATED DARK FOREST PALETTE
+  static const Color primaryDark = Color(0xFF0D2310); // Deep Obsidian Green
+  static const Color forestGreen = Color(
+    0xFF1B5E20,
+  ); // Classic Management Green
+  static const Color emeraldMed = Color(0xFF2E7D32); // Rich Emerald
+  static const Color accentMint = Color(0xFF81C784); // Soft Mint Accent
+  static const Color bgLeaf = Color(0xFFF1F8E9); // Very Light Green Wash
 
   @override
   Widget build(BuildContext context) {
-    final filteredIssues = issues.where((issue) {
-      final matchesFilter =
-          selectedFilter == 'All' || issue['status'] == selectedFilter;
-      final matchesSearch =
-      issue['title'].toLowerCase().contains(searchQuery.toLowerCase());
-      return matchesFilter && matchesSearch;
-    }).toList();
-
     return Scaffold(
-      backgroundColor: background,
-      body: Column(
+      backgroundColor: bgLeaf,
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('issues')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(color: forestGreen),
+            );
+          }
+
+          final allIssues = snapshot.data!.docs;
+
+          final filteredIssues = allIssues.where((doc) {
+            final issue = doc.data() as Map<String, dynamic>;
+            final status = issue['status'] ?? '';
+            final title = issue['title'] ?? '';
+
+            final matchesFilter =
+                selectedFilter == 'All' || status == selectedFilter;
+            final matchesSearch = title.toLowerCase().contains(
+              searchQuery.toLowerCase(),
+            );
+
+            return matchesFilter && matchesSearch;
+          }).toList();
+
+          return CustomScrollView(
+            // Using ScrollView for better header interaction
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(child: _header()),
+              SliverToBoxAdapter(child: _summaryRow(allIssues)),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                  child: Column(
+                    children: [
+                      _searchBar(),
+                      const SizedBox(height: 16),
+                      _filterChips(),
+                    ],
+                  ),
+                ),
+              ),
+              filteredIssues.isEmpty
+                  ? const SliverFillRemaining(
+                child: Center(
+                  child: Text(
+                    "No issues found",
+                    style: TextStyle(fontFamily: 'Poppins'),
+                  ),
+                ),
+              )
+                  : SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                        (context, i) =>
+                        _animatedIssueCard(filteredIssues[i], i),
+                    childCount: filteredIssues.length,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ================= IMPROVED ANIMATED CARD WRAPPER =================
+  Widget _animatedIssueCard(QueryDocumentSnapshot doc, int index) {
+    return TweenAnimationBuilder<double>(
+      duration: Duration(milliseconds: 400 + (index * 100).clamp(0, 500)),
+      tween: Tween(begin: 0.0, end: 1.0),
+      curve: Curves.easeOutQuint,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 30 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
+      child: _issueCard(doc),
+    );
+  }
+
+  // ================= HEADER WITH PREMIUM GRADIENT =================
+  Widget _header() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 60, 16, 32),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [primaryDark, forestGreen, emeraldMed],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: primaryDark.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(35)),
+      ),
+      child: Row(
         children: [
-          _header(),
-          _summaryRow(),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _searchBar(),
-                const SizedBox(height: 12),
-                _filterChips(),
-              ],
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              icon: const Icon(
+                Icons.arrow_back_ios_new,
+                color: Colors.white,
+                size: 20,
+              ),
+              onPressed: () => Navigator.pop(context),
             ),
           ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: filteredIssues.length,
-              itemBuilder: (_, i) => _issueCard(filteredIssues[i]),
+          const SizedBox(width: 16),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Management Hub",
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontFamily: 'Poppins',
+                ),
+              ),
+              Text(
+                "Issue Tracker",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Poppins',
+                  letterSpacing: 1.1,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ================= SUMMARY CARDS WITH DEPTH =================
+  Widget _summaryRow(List<QueryDocumentSnapshot> issues) {
+    int count(String s) =>
+        issues.where((i) => ((i.data() as Map)['status'] ?? '') == s).length;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: [
+            _summaryCard(
+              "Total",
+              issues.length,
+              forestGreen,
+              Icons.analytics_rounded,
+            ),
+            _summaryCard(
+              "Open",
+              count('Open'),
+              const Color(0xFFD32F2F),
+              Icons.error_outline,
+            ),
+            _summaryCard(
+              "Active",
+              count('In Progress'),
+              Colors.orange.shade800,
+              Icons.loop_rounded,
+            ),
+            _summaryCard(
+              "Solved",
+              count('Resolved'),
+              const Color(0xFF388E3C),
+              Icons.check_circle_outline,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryCard(String label, int count, Color color, IconData icon) {
+    return Container(
+      width: 110,
+      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: color.withOpacity(0.1), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.08),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 12),
+          Text(
+            count.toString(),
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: primaryDark,
+              fontFamily: 'Poppins',
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -85,28 +269,233 @@ class _IssueManageScreenState extends State<IssueManageScreen> {
     );
   }
 
-  /// 🌿 HEADER
-  Widget _header() {
+  // ================= SEARCH BAR =================
+  Widget _searchBar() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 48, 16, 28),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [primary, secondary],
+      decoration: BoxDecoration(
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: TextField(
+        onChanged: (v) => setState(() => searchQuery = v),
+        decoration: InputDecoration(
+          hintText: "Search issues...",
+          hintStyle: const TextStyle(color: Colors.grey),
+          prefixIcon: const Icon(Icons.search_rounded, color: forestGreen),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(vertical: 18),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: BorderSide.none,
+          ),
         ),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+      ),
+    );
+  }
+
+  // ================= FILTER CHIPS =================
+  Widget _filterChips() {
+    final filters = ['All', 'Open', 'In Progress', 'Resolved'];
+
+    return SizedBox(
+      height: 45,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        children: filters.map((f) {
+          final selected = selectedFilter == f;
+          return Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              child: ChoiceChip(
+                label: Text(f),
+                selected: selected,
+                selectedColor: primaryDark,
+                backgroundColor: Colors.white,
+                elevation: selected ? 4 : 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                labelStyle: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                  color: selected ? Colors.white : primaryDark,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                onSelected: (_) => setState(() => selectedFilter = f),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ================= ISSUE CARD =================
+  Widget _issueCard(QueryDocumentSnapshot doc) {
+    final issue = doc.data() as Map<String, dynamic>;
+    final status = issue['status'] ?? 'Unknown';
+    final title = issue['title'] ?? 'No Title';
+    final location = issue['location'] ?? 'Unknown Location';
+    final category = issue['category'] ?? 'General';
+    final priority = issue['priority'] ?? 'Low';
+    final color = _statusColor(status);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: InkWell(
+          onTap: () => _showDetails(doc),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              border: Border(left: BorderSide(color: color, width: 6)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _statusChip(status, color),
+                    const Spacer(),
+                    _createdAt(issue['createdAt']),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'Poppins',
+                    color: primaryDark,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.location_on_rounded,
+                      size: 14,
+                      color: Colors.grey,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      location,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Divider(height: 1, thickness: 1),
+                ),
+                Row(
+                  children: [
+                    _tag(category, forestGreen, Icons.category_outlined),
+                    const SizedBox(width: 8),
+                    _tag(
+                      priority,
+                      _priorityColor(priority),
+                      Icons.flag_outlined,
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: bgLeaf,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 12,
+                        color: forestGreen,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statusChip(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1.0,
+        ),
+      ),
+    );
+  }
+
+  Widget _createdAt(dynamic ts) {
+    if (ts is Timestamp) {
+      return Text(
+        ts.toDate().toString().substring(0, 10),
+        style: TextStyle(
+          color: Colors.grey.shade500,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+      );
+    }
+    return const SizedBox();
+  }
+
+  Widget _tag(String text, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgLeaf,
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
-          ),
-          const SizedBox(width: 8),
-          const Text(
-            "Issue Management",
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            text,
             style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
+              color: color,
+              fontSize: 11,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -115,249 +504,152 @@ class _IssueManageScreenState extends State<IssueManageScreen> {
     );
   }
 
-  /// 📊 SUMMARY
-  Widget _summaryRow() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          _summaryCard("Total", issues.length, primary),
-          _summaryCard("Open", _count('Open'), Colors.redAccent),
-          _summaryCard("Active", _count('In Progress'), secondary),
-          _summaryCard("Solved", _count('Resolved'), success),
-        ],
-      ),
-    );
-  }
+  // ================= MODERN BOTTOM SHEET =================
+  void _showDetails(QueryDocumentSnapshot doc) {
+    final issue = doc.data() as Map<String, dynamic>;
+    final title = issue['title'] ?? 'No Title';
+    final description = issue['description'] ?? 'No description';
 
-  int _count(String status) =>
-      issues.where((i) => i['status'] == status).length;
-
-  Widget _summaryCard(String label, int count, Color color) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 6),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.2),
-              blurRadius: 10,
-              offset: const Offset(0, 6),
-            )
-          ],
-        ),
-        child: Column(
-          children: [
-            Text(
-              count.toString(),
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 🔍 SEARCH
-  Widget _searchBar() {
-    return TextField(
-      onChanged: (v) => setState(() => searchQuery = v),
-      decoration: InputDecoration(
-        hintText: "Search issues...",
-        prefixIcon: const Icon(Icons.search, color: primary),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-      ),
-    );
-  }
-
-  /// 🏷 FILTERS
-  Widget _filterChips() {
-    final filters = ['All', 'Open', 'In Progress', 'Resolved'];
-
-    return SizedBox(
-      height: 40,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: filters.map((f) {
-          final selected = selectedFilter == f;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(f),
-              selected: selected,
-              selectedColor: secondary,
-              labelStyle: TextStyle(
-                color: selected ? Colors.white : Colors.black,
-              ),
-              onSelected: (_) => setState(() => selectedFilter = f),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  /// 📋 ISSUE CARD
-  Widget _issueCard(Map<String, dynamic> issue) {
-    final color = _statusColor(issue['status']);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: InkWell(
-        onTap: () => _showDetails(issue),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    issue['status'],
-                    style: TextStyle(color: color, fontSize: 12),
-                  ),
-                ),
-                const Spacer(),
-                Text(issue['date'], style: const TextStyle(color: Colors.grey)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              issue['title'],
-              style:
-              const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Text(issue['location'],
-                style: const TextStyle(color: Colors.grey)),
-            const Divider(height: 24),
-            Row(
-              children: [
-                _tag(issue['category'], primary),
-                const SizedBox(width: 8),
-                _tag(issue['priority'], _priorityColor(issue['priority'])),
-                const Spacer(),
-                const Icon(Icons.arrow_forward_ios, size: 14),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _tag(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        border: Border.all(color: color.withOpacity(0.4)),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(text, style: TextStyle(color: color, fontSize: 11)),
-    );
-  }
-
-  void _showDetails(Map<String, dynamic> issue) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(20),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(issue['title'],
-                style:
-                const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            Text(issue['description']),
+            Center(
+              child: Container(
+                width: 50,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
+            Text(
+              "Issue Details",
+              style: TextStyle(
+                color: forestGreen.withOpacity(0.6),
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                fontFamily: 'Poppins',
+                color: primaryDark,
+              ),
+            ),
             const SizedBox(height: 20),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade800,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 35),
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      setState(() => issue['status'] = 'In Progress');
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: const BorderSide(color: forestGreen),
+                      ),
+                    ),
+                    onPressed: () async {
+                      await FirebaseFirestore.instance
+                          .collection('issues')
+                          .doc(doc.id)
+                          .update({'status': 'In Progress'});
                       Navigator.pop(context);
                     },
-                    child: const Text("Mark Active"),
+                    child: const Text(
+                      "Mark Active",
+                      style: TextStyle(
+                        color: forestGreen,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 15),
                 Expanded(
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: success),
-                    onPressed: () {
-                      setState(() => issue['status'] = 'Resolved');
+                      backgroundColor: forestGreen,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    onPressed: () async {
+                      await FirebaseFirestore.instance
+                          .collection('issues')
+                          .doc(doc.id)
+                          .update({
+                        'status': 'Resolved',
+                        'resolvedAt': FieldValue.serverTimestamp(),
+                      });
                       Navigator.pop(context);
                     },
-                    child: const Text("Resolve"),
+                    child: const Text(
+                      "Resolve Issue",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],
-            )
+            ),
           ],
         ),
       ),
     );
   }
 
+  // ================= HELPERS =================
   Color _statusColor(String s) {
     switch (s) {
       case 'Open':
-        return Colors.redAccent;
+        return const Color(0xFFE53935);
       case 'In Progress':
-        return secondary;
+        return Colors.orange.shade800;
       case 'Resolved':
-        return success;
+        return const Color(0xFF2E7D32);
       default:
-        return primary;
+        return forestGreen;
     }
   }
 
   Color _priorityColor(String p) {
     switch (p) {
       case 'High':
-        return Colors.red;
+        return const Color(0xFFC62828);
       case 'Medium':
-        return Colors.orange;
+        return const Color(0xFFEF6C00);
       case 'Low':
-        return primary;
+        return forestGreen;
       default:
         return Colors.grey;
     }

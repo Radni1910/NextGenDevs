@@ -1,11 +1,13 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart'; // ✅ added
+import 'package:shimmer/shimmer.dart';
 
 class DormTrackLogo extends StatelessWidget {
   final double iconSize;
   final double padding;
   final double borderRadius;
   final bool showText;
+  final Animation<double>? borderAnimation; // Controls the border rotation
 
   const DormTrackLogo({
     super.key,
@@ -13,6 +15,7 @@ class DormTrackLogo extends StatelessWidget {
     this.padding = 22,
     this.borderRadius = 26,
     this.showText = false,
+    this.borderAnimation,
   });
 
   @override
@@ -20,37 +23,59 @@ class DormTrackLogo extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: EdgeInsets.all(padding),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF57CC99), Color(0xFF80ED99), Color(0xFFC7F9CC)],
-            ),
-            borderRadius: BorderRadius.circular(borderRadius),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF22C55E).withValues(alpha: 0.35),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+        // --- Icon with AI-style Racing Border ---
+        AnimatedBuilder(
+          animation: borderAnimation ?? AlwaysStoppedAnimation(0),
+          builder: (context, child) {
+            return Container(
+              padding: const EdgeInsets.all(2.5), // Border thickness
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(borderRadius + 2),
+                gradient: SweepGradient(
+                  colors: const [
+                    Color(0xFF0D47A1), // Deep Blue
+                    Color(0xFF00ACC1), // Teal
+                    Color(0xFF80CBC4), // Mint
+                    Colors.transparent, // Gap for the "racing" effect
+                    Color(0xFF0D47A1),
+                  ],
+                  stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+                  transform: GradientRotation(
+                    (borderAnimation?.value ?? 0) * 2 * math.pi,
+                  ),
+                ),
               ),
-            ],
-          ),
-          child: Icon(
-            Icons.domain_rounded,
-            size: iconSize,
-            color: Colors.white,
+              child: child,
+            );
+          },
+          child: Container(
+            padding: EdgeInsets.all(padding),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(borderRadius),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF0D47A1),
+                  Color(0xFF00ACC1),
+                  Color(0xFF80CBC4),
+                ],
+              ),
+            ),
+            child: Icon(
+              Icons.domain_rounded,
+              size: iconSize,
+              color: Colors.white,
+            ),
           ),
         ),
 
         if (showText) ...[
-          const SizedBox(height: 20),
-
-          // ✨ SHIMMER TITLE
+          const SizedBox(height: 24),
+          // Shimmer Title
           Shimmer.fromColors(
-            baseColor: const Color(0xFF14532D),
-            highlightColor: const Color(0xFF22C55E),
+            baseColor: const Color(0xFF0D47A1),
+            highlightColor: const Color(0xFF00ACC1),
             period: const Duration(milliseconds: 1600),
             child: const Text(
               'DormTrack',
@@ -59,21 +84,23 @@ class DormTrackLogo extends StatelessWidget {
                 fontSize: 36,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.8,
-                color: Color(0xFF14532D),
+                color: Color(0xFF0D47A1),
               ),
             ),
           ),
-
           const SizedBox(height: 6),
-
-          // ✨ SHIMMER SUBTITLE
+          // Shimmer Subtitle
           Shimmer.fromColors(
-            baseColor: const Color(0xFF4D7C0F),
-            highlightColor: const Color(0xFF86EFAC),
+            baseColor: const Color(0xFF006064),
+            highlightColor: const Color(0xFF80CBC4),
             period: const Duration(milliseconds: 1800),
             child: const Text(
               'Smart Hostel Issue Tracking System',
-              style: TextStyle(fontSize: 14, color: Color(0xFF4D7C0F)),
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF006064),
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

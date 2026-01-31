@@ -1,0 +1,37 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "dormtrack-3fbd6",
+          "appId": "1:590200128665:android:3bbc435dd6ce8406ef6408",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "dormtrack-3fbd6",
+          "configurations": {
+            "android": "1:590200128665:android:3bbc435dd6ce8406ef6408",
+            "ios": "1:590200128665:ios:a4d643946d7112bdef6408",
+            "web": "1:590200128665:web:e18b4ba4abd40be3ef6408"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}
